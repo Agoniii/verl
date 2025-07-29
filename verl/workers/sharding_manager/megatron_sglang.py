@@ -21,6 +21,7 @@ import asyncio
 import logging
 import os
 
+import torch
 import torch.distributed as dist
 from omegaconf import DictConfig
 from sglang.srt.entrypoints.engine import Engine
@@ -44,6 +45,21 @@ from verl.utils.profiler import GPUMemoryLogger, log_gpu_memory_usage, simple_ti
 from verl.workers.rollout.sglang_rollout.utils import get_named_tensor_buckets
 
 from .base import BaseShardingManager
+
+# Import SGLang FP8 quantization
+try:
+    from sglang.srt.layers.quantization.fp8_kernel import scaled_fp8_quant
+    FP8_AVAILABLE = True
+    print("SGLang FP8 quantization available")
+except ImportError:
+    try:
+        from vllm._custom_ops import scaled_fp8_quant
+        FP8_AVAILABLE = True
+        print("vLLM FP8 quantization available")
+    except ImportError:
+        FP8_AVAILABLE = False
+        print("FP8 quantization not available. Using original weight update method.")
+
 
 logger = logging.getLogger(__file__)
 logger.setLevel(os.getenv("VERL_PPO_LOGGING_LEVEL", "WARN"))
@@ -97,6 +113,7 @@ class MegatronSGLangShardingManager(BaseShardingManager):
     ):
         self.actor_module = actor_module
         self.inference_engine = inference_engine
+        print("xueh self.inference_engine", self.inference_engine)
         self.model_config = model_config
         self.rollout_config = rollout_config
         self.transformer_config = transformer_config
@@ -149,7 +166,44 @@ class MegatronSGLangShardingManager(BaseShardingManager):
         """
         if self.device_mesh["tp"].get_local_rank() == 0 and self.rollout_config.free_cache_engine:
             await self.inference_engine.resume_memory_occupation()
-        named_tensors = params
+
+        #named_tensors = params
+        print("xueh update weights")
+        self.enable_fp8_quantization = False
+        if self.enable_fp8_quantization:
+            print("xueh Applying FP8 quantization to tensors in the batch")
+            named_tensors = []
+            for name, tensor in params:
+                print(name, tensor.dtype, tensor.shape)
+                if 'layernorm' not in name and 'norm' not in name and 'bias' not in name:
+                    if tensor.dtype in [torch.float16, torch.bfloat16, torch.float32]:
+                        # Store original tensor for comparison
+                        original_tensor = tensor.clone()
+                        original_shape = tensor.shape
+                        #print(f'tensor.dim()={tensor.dim()}')
+                        # # Reshape tensor to 2D for FP8 quantization (required by scaled_fp8_quant)
+                        if tensor.dim() > 2:
+                            # Flatten all dimensions except the last one for quantization
+                            # For example: (batch, seq, hidden) -> (batch*seq, hidden)
+                            tensor_2d = tensor.view(-1, tensor.shape[-1])
+                        else:
+                            tensor_2d = tensor
+                        # Apply FP8 quantization using SGLang's online quantization
+                        quantized_tensor, scale = scaled_fp8_quant(tensor_2d)
+                        print(f"Applied FP8 quantization to tensor {name}")
+                        # Reshape back to original shape
+                        quantized_tensor = quantized_tensor.view(original_shape)
+                        print("tensor ", tensor.weight_loader)
+                        named_tensors.append((name, quantized_tensor))
+                    else:
+                        # Keep original tensor if not supported for quantization
+                        named_tensors.append((name, tensor))
+                else:
+                    # Keep original tensor if not supported for quantization
+                    named_tensors.append((name, tensor))
+        else:
+            named_tensors = params
+
         load_format = None
 
         update_weights_bucket_bytes = int(self.rollout_config.update_weights_bucket_megabytes) << 20
