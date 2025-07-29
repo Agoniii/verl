@@ -313,6 +313,14 @@ class ActorRolloutRefWorker(MegatronWorker, DistProfilerExtension):
             from verl.models.mcore import get_mcore_weight_converter
 
             weight_converter = get_mcore_weight_converter(self.actor_model_config, self.dtype)
+            # engine_kwargs = (
+            #     {}
+            #     if "engine_kwargs" not in self.config.rollout or "vllm" not in self.config.rollout.engine_kwargs
+            #     else OmegaConf.to_container(deepcopy(self.config.rollout.engine_kwargs.vllm))
+            # )
+            # quantization=engine_kwargs["quantization"] if "quantization" in engine_kwargs else None
+            quantization = False
+            print("xueh quantization", quantization)
             sharding_manager = MegatronVLLMShardingManager(
                 inference_engine=rollout.inference_engine,
                 model_config=self.actor_model_config,
@@ -324,6 +332,7 @@ class ActorRolloutRefWorker(MegatronWorker, DistProfilerExtension):
                 device_mesh=rollout_device_mesh,
                 offload_param=self._is_offload_param,
                 bridge=self.bridge,
+                quantization=quantization,
             )
             log_gpu_memory_usage("After building sharding manager", logger=logger)
 

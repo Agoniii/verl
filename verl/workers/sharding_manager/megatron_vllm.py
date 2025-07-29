@@ -92,6 +92,7 @@ class MegatronVLLMShardingManager(BaseShardingManager):
         device_mesh,
         offload_param: bool = True,
         bridge=None,
+        quantization=None,
     ):
         self.actor_module = actor_module
         self.inference_engine = inference_engine
@@ -138,6 +139,7 @@ class MegatronVLLMShardingManager(BaseShardingManager):
             get_torch_device().set_rng_state(self.torch_random_states)
         else:
             self.gen_random_states = None
+        self.quantization = quantization
 
     @GPUMemoryLogger(role="megatron vllm sharding_manager", logger=logger)
     def __enter__(self):
@@ -169,6 +171,30 @@ class MegatronVLLMShardingManager(BaseShardingManager):
             loaded_params = model.load_weights(per_tensor_param)
             info = f"vLLM load weights, loaded_params: {len(loaded_params)}"
             logger.info(info)
+
+            ############## quantization
+            if self.quantization:
+                device = get_torch_device().current_device()
+                vllm_config = self.inference_engine.llm_engine.vllm_config
+                model_config = vllm_config.model_config
+                from vllm.model_executor.model_loader.loader import _process_weights_after_loading, _initialize_model
+                from vllm.model_executor.model_loader.utils import set_default_torch_dtype
+
+                with set_default_torch_dtype(model_config.dtype):
+                with torch.device(device):
+                    model = _initialize_model(vllm_config=vllm_config)
+                weights_to_load = {name for name, _ in model.named_parameters()}
+                # We only enable strict check for non-quantized models
+                # that have loaded weights tracking currently.
+                if model_config.quantization is None and loaded_weights is not None:
+                    weights_not_loaded = weights_to_load - loaded_weights
+                    if weights_not_loaded:
+                        raise ValueError(
+                            "Following weights were not initialized from "
+                            f"checkpoint: {weights_not_loaded}")
+                _process_weights_after_loading(model, model_config, torch.device(device))
+                self.model_runner.model = model
+            ##############
 
             if self.offload_param:
                 offload_megatron_model_to_cpu(self.actor_module)
