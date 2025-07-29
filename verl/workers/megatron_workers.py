@@ -15,6 +15,7 @@
 The main entry point to run the PPO algorithm
 """
 
+from copy import deepcopy
 import datetime
 import logging
 import os
@@ -313,13 +314,13 @@ class ActorRolloutRefWorker(MegatronWorker, DistProfilerExtension):
             from verl.models.mcore import get_mcore_weight_converter
 
             weight_converter = get_mcore_weight_converter(self.actor_model_config, self.dtype)
-            # engine_kwargs = (
-            #     {}
-            #     if "engine_kwargs" not in self.config.rollout or "vllm" not in self.config.rollout.engine_kwargs
-            #     else OmegaConf.to_container(deepcopy(self.config.rollout.engine_kwargs.vllm))
-            # )
-            # quantization=engine_kwargs["quantization"] if "quantization" in engine_kwargs else None
-            quantization = False
+            engine_kwargs = (
+                {}
+                if "engine_kwargs" not in self.config.rollout or "vllm" not in self.config.rollout.engine_kwargs
+                else OmegaConf.to_container(deepcopy(self.config.rollout.engine_kwargs.vllm))
+            )
+            quantization = engine_kwargs["quantization"] if "quantization" in engine_kwargs else None
+
             print("xueh quantization", quantization)
             sharding_manager = MegatronVLLMShardingManager(
                 inference_engine=rollout.inference_engine,

@@ -167,13 +167,14 @@ class MegatronVLLMShardingManager(BaseShardingManager):
                     self.layer_name_mapping,
                 )
             model = self.model_runner.model
+            print("xueh model ", model)
             patch_vllm_moe_model_weight_loader(model)
             loaded_params = model.load_weights(per_tensor_param)
             info = f"vLLM load weights, loaded_params: {len(loaded_params)}"
             logger.info(info)
 
             ############## quantization
-            if self.quantization:
+            if self.quantization is not None:
                 device = get_torch_device().current_device()
                 vllm_config = self.inference_engine.llm_engine.vllm_config
                 model_config = vllm_config.model_config
@@ -181,18 +182,20 @@ class MegatronVLLMShardingManager(BaseShardingManager):
                 from vllm.model_executor.model_loader.utils import set_default_torch_dtype
 
                 with set_default_torch_dtype(model_config.dtype):
-                with torch.device(device):
-                    model = _initialize_model(vllm_config=vllm_config)
-                weights_to_load = {name for name, _ in model.named_parameters()}
-                # We only enable strict check for non-quantized models
-                # that have loaded weights tracking currently.
-                if model_config.quantization is None and loaded_weights is not None:
-                    weights_not_loaded = weights_to_load - loaded_weights
-                    if weights_not_loaded:
-                        raise ValueError(
-                            "Following weights were not initialized from "
-                            f"checkpoint: {weights_not_loaded}")
-                _process_weights_after_loading(model, model_config, torch.device(device))
+                    # with torch.device(device):
+                    #     model = _initialize_model(vllm_config=vllm_config)
+                    weights_to_load = {name for name, _ in model.named_parameters()}
+                    print("weights_to_load", weights_to_load)
+                    print("loaded_params", loaded_params)
+                    # We only enable strict check for non-quantized models
+                    # that have loaded weights tracking currently.
+                    if model_config.quantization is None and loaded_params is not None:
+                        weights_not_loaded = weights_to_load - loaded_params
+                        if weights_not_loaded:
+                            raise ValueError(
+                                "Following weights were not initialized from "
+                                f"checkpoint: {weights_not_loaded}")
+                    _process_weights_after_loading(model, model_config, torch.device(device))
                 self.model_runner.model = model
             ##############
 

@@ -78,7 +78,6 @@ multi_stage_wake_up: false
 
 # Extra inference engine arguments (vllm, sglang).
 engine_kwargs:
-
   # for vllm
   vllm:
 
@@ -87,6 +86,7 @@ engine_kwargs:
 
     # Whether to disable the preprocessor cache for multimodel models.
     disable_mm_preprocessor_cache: False
+    quantization: fp8
 
   # for sglang
   sglang:
