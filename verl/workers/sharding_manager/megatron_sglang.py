@@ -48,7 +48,7 @@ from .base import BaseShardingManager
 
 # Import SGLang FP8 quantization
 try:
-    from sglang.srt.layers.quantization.fp8_kernel import scaled_fp8_quant
+    from sglang.srt.layers.quantization.fp8_kernel import scaled_fp8_quant, per_token_group_quant_fp8
     FP8_AVAILABLE = True
     print("SGLang FP8 quantization available")
 except ImportError:
@@ -169,13 +169,14 @@ class MegatronSGLangShardingManager(BaseShardingManager):
 
         #named_tensors = params
         print("xueh update weights")
-        self.enable_fp8_quantization = False
+        self.enable_fp8_quantization = True
         if self.enable_fp8_quantization:
-            print("xueh Applying FP8 quantization to tensors in the batch")
             named_tensors = []
             for name, tensor in params:
                 print(name, tensor.dtype, tensor.shape)
-                if 'layernorm' not in name and 'norm' not in name and 'bias' not in name:
+                if 'qkv_proj.weight' in name or 'o_proj.weight' in name or \
+                  'gate_proj.weight' in name or 'up_proj.weight' in name:
+
                     if tensor.dtype in [torch.float16, torch.bfloat16, torch.float32]:
                         # Store original tensor for comparison
                         original_tensor = tensor.clone()
@@ -189,12 +190,16 @@ class MegatronSGLangShardingManager(BaseShardingManager):
                         else:
                             tensor_2d = tensor
                         # Apply FP8 quantization using SGLang's online quantization
-                        quantized_tensor, scale = scaled_fp8_quant(tensor_2d)
-                        print(f"Applied FP8 quantization to tensor {name}")
+                        #quantized_tensor, scale = scaled_fp8_quant(tensor_2d)
+                        quantized_tensor, scale = per_token_group_quant_fp8(
+                            tensor_2d, tensor_2d.shape[-1]
+                        )
+                        print(f"Applied FP8 quantization to tensor {name} {quantized_tensor.shape} {scale.shape}")
                         # Reshape back to original shape
                         quantized_tensor = quantized_tensor.view(original_shape)
-                        print("tensor ", tensor.weight_loader)
-                        named_tensors.append((name, quantized_tensor))
+                        scale = scale.transpose(0, 1)
+                        scale_name = name.replace(".weight", ".weight_scale")
+                        named_tensors.extend([(name, quantized_tensor), (scale_name, scale)])
                     else:
                         # Keep original tensor if not supported for quantization
                         named_tensors.append((name, tensor))
