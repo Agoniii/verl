@@ -49,6 +49,7 @@ from .base import BaseShardingManager
 # Import SGLang FP8 quantization
 try:
     from sglang.srt.layers.quantization.fp8_kernel import scaled_fp8_quant, per_token_group_quant_fp8
+    from sglang.srt.layers.quantization.fp8_utils import input_to_float8
     FP8_AVAILABLE = True
     print("SGLang FP8 quantization available")
 except ImportError:
@@ -173,15 +174,15 @@ class MegatronSGLangShardingManager(BaseShardingManager):
         if self.enable_fp8_quantization:
             named_tensors = []
             for name, tensor in params:
-                print(name, tensor.dtype, tensor.shape)
-                if 'qkv_proj.weight' in name or 'o_proj.weight' in name or \
-                  'gate_proj.weight' in name or 'up_proj.weight' in name:
-
+                print("param: ", name, tensor.dtype, tensor.shape)
+                if 'q_proj.weight' in name or 'k_proj.weight' in name or \
+                   'v_proj.weight' in name or 'o_proj.weight' in name or \
+                  'gate_proj.weight' in name or 'up_proj.weight' in name or \
+                  'down_proj.weight' in name:
                     if tensor.dtype in [torch.float16, torch.bfloat16, torch.float32]:
                         # Store original tensor for comparison
                         original_tensor = tensor.clone()
                         original_shape = tensor.shape
-                        #print(f'tensor.dim()={tensor.dim()}')
                         # # Reshape tensor to 2D for FP8 quantization (required by scaled_fp8_quant)
                         if tensor.dim() > 2:
                             # Flatten all dimensions except the last one for quantization
@@ -190,16 +191,17 @@ class MegatronSGLangShardingManager(BaseShardingManager):
                         else:
                             tensor_2d = tensor
                         # Apply FP8 quantization using SGLang's online quantization
-                        #quantized_tensor, scale = scaled_fp8_quant(tensor_2d)
-                        quantized_tensor, scale = per_token_group_quant_fp8(
-                            tensor_2d, tensor_2d.shape[-1]
-                        )
-                        print(f"Applied FP8 quantization to tensor {name} {quantized_tensor.shape} {scale.shape}")
+                        # force to use per-tensor quant for weights
+                        quantized_tensor, scale = input_to_float8(tensor_2d)
                         # Reshape back to original shape
                         quantized_tensor = quantized_tensor.view(original_shape)
-                        scale = scale.transpose(0, 1)
+
+                        # TODO: need to check why only o_proj and down_proj need to do transpose
+                        if 'o_proj.weight' in name or 'down_proj.weight' in name:
+                            quantized_tensor = quantized_tensor.t()
                         scale_name = name.replace(".weight", ".weight_scale")
                         named_tensors.extend([(name, quantized_tensor), (scale_name, scale)])
+                        print(f"Applied FP8 quantization to tensor {name} {quantized_tensor.shape} {scale.shape}")
                     else:
                         # Keep original tensor if not supported for quantization
                         named_tensors.append((name, tensor))
@@ -208,6 +210,8 @@ class MegatronSGLangShardingManager(BaseShardingManager):
                     named_tensors.append((name, tensor))
         else:
             named_tensors = params
+            for name, tensor in params:
+                print("param: ", name, tensor.dtype, tensor.shape)
 
         load_format = None
 
