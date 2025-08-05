@@ -1,0 +1,115 @@
+set -x
+cp -rp /home/xueh/workspace/projects/rl/verl_blockquant/vllm0.9.1/* /usr/local/lib/python3.10/dist-packages/vllm
+sh kill.sh
+# If you are using vllm<=0.6.3, you might need to set the following environment variable to avoid bugs:
+# export VLLM_ATTENTION_BACKEND=XFORMERS
+export CUDA_DEVICE_MAX_CONNECTIONS=1 # For megatron communication/computation overlapping
+wandb login fe13d4cd2254d5b645d6b48f3fe6429f02d826a1
+
+current_date=`date +%Y%m%d-%H%M`
+gsm8k_train_path=/lustre/raplab/client/xueh/workspace/projects/rl/verl/data/gsm8k/train.parquet
+gsm8k_test_path=/lustre/raplab/client/xueh/workspace/projects/rl/verl/data/gsm8k/test.parquet
+math_train_path=/lustre/raplab/client/xueh/workspace/projects/rl/verl/data/math/train.parquet
+math_test_path=/lustre/raplab/client/xueh/workspace/projects/rl/verl/data/math/test.parquet
+OUTPUT_DIR=/lustre/raplab/client/xueh/workspace/projects/rl/verl_blockquant/examples/grpo_trainer/nsys_files
+train_files="['$gsm8k_train_path', '$math_train_path']"
+test_files="['$gsm8k_test_path', '$math_test_path']"
+
+# Nsight profiling configuration
+# PROFILE_STEPS="[2,3,4]" # or [] or null
+# PROFILE_RANKS_ALL=True # or True
+# DISCRETE=True  # or True
+
+PROFILE=${PROFILE:-0}
+if [ $PROFILE -eq 1 ]; then
+    echo "Profiling is enabled"
+    PROFILE_STEPS="[2]"
+    TOTAL_TRAINING_STEPS=4
+    DISCRETE=True
+    PROFILE_RANKS_ALL=False
+    PROFILE_RANKS=[0]
+else
+    PROFILE_STEPS=null
+    TOTAL_TRAINING_STEPS=null
+    DISCRETE=True
+    PROFILE_RANKS_ALL=False
+    PROFILE_RANKS=null
+fi
+
+TOTAL_TRAINING_STEPS=2
+
+
+use_dynamic_bsz=True
+max_prompt_length=1024
+max_response_length=4096
+offload=True
+rollout_backend=vllm
+
+PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo --config-path=config \
+    --config-name='ppo_megatron_trainer.yaml'\
+    algorithm.adv_estimator=grpo \
+    data.train_files="$train_files" \
+    data.val_files="$test_files" \
+    data.train_batch_size=256 \
+    data.max_prompt_length=${max_prompt_length} \
+    data.max_response_length=${max_response_length} \
+    data.filter_overlong_prompts=True \
+    data.truncation='left' \
+    actor_rollout_ref.model.path=/lustre/raplab/client/xueh/workspace/projects/rl/verl_fp8/examples/grpo_trainer/Qwen2.5-0.5B-Instruct \
+    actor_rollout_ref.actor.optim.lr=1e-6 \
+    actor_rollout_ref.actor.ppo_mini_batch_size=16 \
+    actor_rollout_ref.actor.megatron.param_offload=${offload} \
+    actor_rollout_ref.actor.megatron.optimizer_offload=${offload} \
+    actor_rollout_ref.actor.megatron.grad_offload=${offload} \
+    actor_rollout_ref.actor.use_dynamic_bsz=${use_dynamic_bsz} \
+    actor_rollout_ref.ref.log_prob_use_dynamic_bsz=${use_dynamic_bsz} \
+    actor_rollout_ref.rollout.log_prob_use_dynamic_bsz=${use_dynamic_bsz} \
+    actor_rollout_ref.actor.ppo_max_token_len_per_gpu=$(( (max_prompt_length + max_response_length) )) \
+    actor_rollout_ref.ref.log_prob_max_token_len_per_gpu=$(( (max_prompt_length + max_response_length) * 10)) \
+    actor_rollout_ref.rollout.log_prob_max_token_len_per_gpu=$(((max_prompt_length + max_response_length) * 10)) \
+    actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=1 \
+    actor_rollout_ref.actor.megatron.pipeline_model_parallel_size=1 \
+    actor_rollout_ref.actor.megatron.tensor_model_parallel_size=1 \
+    actor_rollout_ref.actor.use_kl_loss=True \
+    actor_rollout_ref.actor.kl_loss_coef=0.001 \
+    actor_rollout_ref.actor.kl_loss_type=low_var_kl \
+    actor_rollout_ref.actor.entropy_coeff=0 \
+    actor_rollout_ref.rollout.enforce_eager=True  \
+    actor_rollout_ref.rollout.free_cache_engine=True \
+    actor_rollout_ref.rollout.disable_log_stats=False \
+    actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=2 \
+    actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
+    actor_rollout_ref.rollout.name=${rollout_backend} \
+    actor_rollout_ref.rollout.gpu_memory_utilization=0.6 \
+    actor_rollout_ref.rollout.enable_chunked_prefill=True \
+    actor_rollout_ref.rollout.max_num_batched_tokens=$((max_prompt_length + max_response_length)) \
+    actor_rollout_ref.rollout.n=2 \
+    actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=2 \
+    actor_rollout_ref.ref.log_prob_use_dynamic_bsz=${use_dynamic_bsz} \
+    actor_rollout_ref.ref.megatron.pipeline_model_parallel_size=1 \
+    actor_rollout_ref.ref.megatron.tensor_model_parallel_size=1 \
+    actor_rollout_ref.ref.megatron.param_offload=${offload} \
+    actor_rollout_ref.actor.megatron.use_mbridge=True \
+    algorithm.use_kl_in_reward=False \
+    trainer.critic_warmup=0 \
+    trainer.logger='["console","wandb"]' \
+    trainer.project_name='verl_fp8_rollout' \
+    trainer.experiment_name=${rollout_backend}_${current_date} \
+    trainer.n_gpus_per_node=1 \
+    trainer.nnodes=1 \
+    trainer.save_freq=-1 \
+    trainer.test_freq=-1 \
+    trainer.total_epochs=1 \
+    trainer.total_training_steps=$TOTAL_TRAINING_STEPS \
+    2>&1 | tee /lustre/raplab/client/xueh/workspace/projects/rl/verl_blockquant/examples/grpo_trainer/logs/${rollout_backend}_fp8.log 2>&1 &
+
+    # trainer.profile_steps=$PROFILE_STEPS \
+    # actor_rollout_ref.profiler.ranks=$PROFILE_RANKS \
+    # actor_rollout_ref.profiler.all_ranks=$PROFILE_RANKS_ALL \
+    # actor_rollout_ref.profiler.discrete=$DISCRETE \
+
+if [ $PROFILE -eq 1 ]; then
+    sleep 60s
+    echo "Copy nsys-rep to ${OUTPUT_DIR} ..."
+    cp /tmp/ray/session_latest/logs/nsight/*.nsys-rep ${OUTPUT_DIR}/
+fi

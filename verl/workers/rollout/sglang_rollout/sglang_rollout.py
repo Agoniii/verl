@@ -80,6 +80,7 @@ try:
     from sglang.srt.entrypoints.openai.protocol import Tool
 except ImportError:
     from sglang.srt.openai_api.protocol import Tool
+import verl.workers.sharding_manager.fp8_util as fp8_quant
 
 
 logger = logging.getLogger(__file__)
@@ -306,6 +307,10 @@ class SGLangRollout(BaseRollout):
         self._init_distributed_env(device_mesh_cpu=device_mesh, **kwargs)
 
         self._verify_config(model_hf_config=model_hf_config)
+
+        # doesn't work
+        # fp8_quant.apply_sglang_fp8_patches()
+
         # initialize the inference engine
         self._init_inference_engine(trust_remote_code, actor_module, port)
 
@@ -464,6 +469,7 @@ class SGLangRollout(BaseRollout):
                 attention_backend="fa3",
                 # In async mode, we want token in token out.
                 skip_tokenizer_init=self.config.mode == "async",
+                quantization="fp8",
             )
         else:
             self._engine = None

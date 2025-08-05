@@ -149,7 +149,12 @@ class MegatronSGLangShardingManager(BaseShardingManager):
         """
         if self.device_mesh["tp"].get_local_rank() == 0 and self.rollout_config.free_cache_engine:
             await self.inference_engine.resume_memory_occupation()
-        named_tensors = params
+        
+        import verl.workers.sharding_manager.fp8_util as fp8_quant
+        if True:
+            named_tensors = fp8_quant.quant_weights_sglang(params)
+        else:
+            named_tensors = params
         load_format = None
 
         update_weights_bucket_bytes = int(self.rollout_config.update_weights_bucket_megabytes) << 20

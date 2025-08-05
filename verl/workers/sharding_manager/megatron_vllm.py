@@ -36,6 +36,7 @@ from verl.utils.profiler import GPUMemoryLogger, log_gpu_memory_usage
 from verl.utils.profiler.performance import simple_timer
 from verl.utils.torch_functional import check_device_is_available
 from verl.utils.vllm_utils import patch_vllm_moe_model_weight_loader
+import verl.workers.sharding_manager.fp8_util as fp8_quant
 
 from .base import BaseShardingManager
 
@@ -166,7 +167,16 @@ class MegatronVLLMShardingManager(BaseShardingManager):
                 )
             model = self.model_runner.model
             patch_vllm_moe_model_weight_loader(model)
-            loaded_params = model.load_weights(per_tensor_param)
+            #loaded_params = model.load_weights(per_tensor_param)
+
+            if fp8_quant.is_fp8_model(self.model_runner.vllm_config):
+                print("xueh is_fp8_model", self.model_runner.vllm_config.quant_config)
+                # the fp8 load_weights additionally casts bf16 weights into fp8
+                loaded_params = fp8_quant.load_quanted_weights(per_tensor_param, self.model_runner)
+            else:
+                print("xueh not is_fp8_model")
+                loaded_params = model.load_weights(weights=per_tensor_param)
+
             info = f"vLLM load weights, loaded_params: {len(loaded_params)}"
             logger.info(info)
 
