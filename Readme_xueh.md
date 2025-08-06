@@ -58,13 +58,13 @@ def quant_weights_sglang(weights):
     use_block_quant = True
 ```
 
-### per tensor(still has error)
+### per tensor
 
 1. `verl/workers/sharding_manager/fp8_util.py`
 
 ```
 def quant_weights_sglang(weights):
-    use_block_quant = True
+    use_block_quant = False
 ```
 
 2. `/usr/local/lib/python3.10/dist-packages/sglang/srt/configs/model_config.py`
@@ -86,7 +86,9 @@ index 6ddd248..98c65b6 100644
 +        # fp8_block_quant_kwargs = dict(FP8_BLOCK_QUANT_KWARGS)
 +        # setattr(self.hf_config, "quantization_config", fp8_block_quant_kwargs)
 ```
-error log:
+
+3. If enable CUDA Graph will cause the following error. We can solve it by setting `disable_cuda_graph=True` in `verl/workers/rollout/sglang_rollout/sglang_rollout.py`. But the performance will be affected.
+
 ```
 (WorkerDict pid=1650695)   File "/usr/local/lib/python3.10/dist-packages/sglang/srt/layers/linear.py", line 445, in forward
 (WorkerDict pid=1650695)     output_parallel = self.quant_method.apply(self, input_, bias)

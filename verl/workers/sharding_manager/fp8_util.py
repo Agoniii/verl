@@ -193,17 +193,18 @@ def quant_weights_sglang(weights):
         # print(f"xueh {quant_config.weight_block_size=}")
         
         if use_block_quant:
+            print("Using blockwise quantization")
             param_lp, param_scale = kitchen_block_scale(
                 v.to(torch.float),
                 weight_block_size=FP8_BLOCK_QUANT_KWARGS["weight_block_size"],
             )
             param_scale = param_scale.squeeze(-1)
-            print(f"xueh quant {k} param: {param_lp.shape}, {param_lp[:10][:10]}")
-            print(f"xueh quant {k} scale: {param_scale.shape}, {param_scale}")
+            # print(f"xueh quant {k} param: {param_lp.shape}, {param_lp[:10][:10]}")
+            # print(f"xueh quant {k} scale: {param_scale.shape}, {param_scale}")
             weights_quantized.append([k, param_lp])
             weights_quantized.append([k + "_scale_inv", param_scale])
         else:
-
+            print("Using Per tensor quantization")
             original_shape = v.shape
             # Apply FP8 quantization using SGLang's online quantization
             # force to use per-tensor quant for weights
@@ -218,9 +219,9 @@ def quant_weights_sglang(weights):
             scale_k = k.replace(".weight", ".weight_scale")
             scale = scale.view(1)
             weights_quantized.extend([(k, quantized_tensor), (scale_k, scale)])
-            if "layers.0" in k:
-                print(f"Applied FP8 quantization to tensor {k} {quantized_tensor.shape} {quantized_tensor[:10][:10]}")
-                print(f"Applied FP8 quantization to tensor {k} {scale.shape} {scale}")
+            # if "layers.0" in k:
+            #     print(f"Applied FP8 quantization to tensor {k} {quantized_tensor.shape} {quantized_tensor[:10][:10]}")
+            #     print(f"Applied FP8 quantization to tensor {k} {scale.shape} {scale}")
     return weights_quantized
 
 
@@ -235,6 +236,7 @@ def quant_weights(weights, model, quant_config):
         # Cast the weight into fp8 and its scale factor
         # print(f"xueh {quant_config.weight_block_size=}")
         if quant_config.weight_block_size is not None:
+            print("Using blockwise quantization")
             param_lp, param_scale = kitchen_block_scale(
                 v.to(torch.float),
                 weight_block_size=quant_config.weight_block_size,
@@ -246,6 +248,7 @@ def quant_weights(weights, model, quant_config):
             weights_quantized.append([k + "_scale_inv", param_scale])
 
         else:
+            print("Using Per tensor quantization")
             # if 'q_proj.weight' in k:
             #     layer_id = int(k.split(".")[2])
             #     k_weight = weights[k.replace(".q_proj", ".k_proj")]
@@ -272,9 +275,9 @@ def quant_weights(weights, model, quant_config):
             scale_k = k.replace(".weight", ".weight_scale")
             scale = scale.view(1)
             weights_quantized.extend([(k, quantized_tensor), (scale_k, scale)])
-            if "layers.0" in k:
-                print(f"Applied FP8 quantization to tensor {k} {quantized_tensor.shape} {quantized_tensor[:10][:10]}")
-                print(f"Applied FP8 quantization to tensor {k} {scale.shape} {scale}")
+            # if "layers.0" in k:
+            #     print(f"Applied FP8 quantization to tensor {k} {quantized_tensor.shape} {quantized_tensor[:10][:10]}")
+            #     print(f"Applied FP8 quantization to tensor {k} {scale.shape} {scale}")
 
     # if len(qkv_weights) > 0 and len(gate_up_weights) > 0:
     #     for k, v in qkv_weights:
@@ -409,8 +412,8 @@ def process_weights_after_loading(self, layer) -> None:
                 weight_loader=layer.weight_scale.weight_loader,
             )
         )
-        print(f"xueh after {layer.weight.shape=}")
-        print(f"xueh after {layer.weight_scale.shape=}")
+        # print(f"xueh after {layer.weight.shape=}")
+        # print(f"xueh after {layer.weight_scale.shape=}")
 
 
 def apply(self,

@@ -470,6 +470,7 @@ class SGLangRollout(BaseRollout):
                 # In async mode, we want token in token out.
                 skip_tokenizer_init=self.config.mode == "async",
                 quantization="fp8",
+                disable_cuda_graph=True,
             )
         else:
             self._engine = None
