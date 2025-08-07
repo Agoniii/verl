@@ -408,7 +408,7 @@ def process_weights_after_loading(self, layer) -> None:
         )
         layer.weight_scale = _create_param_from_subclass_attributes(
             PerTensorScaleParameter(
-                data=weight_scale.unsqueeze(0).expand(len(layer.logical_widths)),
+                data=weight_scale.repeat(len(layer.logical_widths)),
                 weight_loader=layer.weight_scale.weight_loader,
             )
         )
