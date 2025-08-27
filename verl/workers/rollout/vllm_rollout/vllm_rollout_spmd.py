@@ -209,12 +209,9 @@ class vLLMRollout(BaseRollout):
             enable_prefix_caching=True,
             trust_remote_code=trust_remote_code,
             seed=config.get("seed", 0),
-<<<<<<< HEAD
             quantization="fp8" if quantization else None,
             hf_overrides={"quantization_config": fp8_block_quant_kwargs} if quantization and use_block_quant else None,
-=======
             **compilation_config,
->>>>>>> upstream/main
             **lora_kwargs,
             **engine_kwargs,
         )

@@ -36,7 +36,6 @@ from verl.utils.memory_utils import aggressive_empty_cache
 from verl.utils.profiler import GPUMemoryLogger, log_gpu_memory_usage
 from verl.utils.profiler.performance import simple_timer
 from verl.utils.torch_functional import check_device_is_available
-from verl.utils.vllm_utils import patch_vllm_moe_model_weight_loader
 import verl.workers.sharding_manager.fp8_util as fp8_quant
 
 from .base import BaseShardingManager
