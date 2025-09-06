@@ -33,6 +33,9 @@ from verl.trainer.config import AlgoConfig
 from verl.utils.import_utils import deprecated
 from verl.workers.config import ActorConfig
 
+# Global set to track printed debug messages to avoid repetition
+_PRINTED_DEBUG_MESSAGES = set()
+
 PolicyLossFn = Callable[
     [
         torch.Tensor,  # old_log_prob
@@ -846,6 +849,11 @@ def compute_policy_loss_vanilla(
             log probabilities of actions under the rollout policy, shape (batch_size, response_length).
     """
 
+    # Print debug message only once for sanity check
+    if "compute_policy_loss_vanilla_entry" not in _PRINTED_DEBUG_MESSAGES:
+        print(f"[SHARON] Entering compute_policy_loss_vanilla")
+        _PRINTED_DEBUG_MESSAGES.add("compute_policy_loss_vanilla_entry")
+
     assert config is not None
     assert not isinstance(config, AlgoConfig)
     clip_ratio = config.clip_ratio  # Clipping parameter ε for standard PPO. See https://arxiv.org/abs/1707.06347.
@@ -891,8 +899,19 @@ def compute_policy_loss_vanilla(
 
     pg_losses = torch.where(advantages < 0, clip_pg_losses2, clip_pg_losses1)
 
+    # Print debug messages only once for sanity check
+    # Debug purpose only. TODO: Remove this after debugging.
+    if "tis_config_check" not in _PRINTED_DEBUG_MESSAGES:
+        print(f"[SHARON] config.tis_imp_ratio_cap: {config.tis_imp_ratio_cap}")
+        print(f"[SHARON] rollout_log_probs is not None: {rollout_log_probs is not None}")
+        _PRINTED_DEBUG_MESSAGES.add("tis_config_check")
+
     if config.tis_imp_ratio_cap > 0 and rollout_log_probs is not None:
         # Apply truncated importance sampling -> https://fengyao.notion.site/off-policy-rl
+        # Debug purpose only. TODO: Remove this after debugging.
+        if "tis_ratio_cap_value" not in _PRINTED_DEBUG_MESSAGES:
+            print(f"tis_imp_ratio_cap: {config.tis_imp_ratio_cap}")
+            _PRINTED_DEBUG_MESSAGES.add("tis_ratio_cap_value")
         tis_imp_ratio = torch.exp(old_log_prob - rollout_log_probs)
         tis_imp_ratio = torch.clamp(tis_imp_ratio, max=config.tis_imp_ratio_cap)
         pg_losses = pg_losses * tis_imp_ratio

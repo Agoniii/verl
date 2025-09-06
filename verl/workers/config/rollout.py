@@ -165,3 +165,7 @@ class RolloutConfig(BaseConfig):
     sglang_engine_mode: str = "local"
 
     limit_images: Optional[int] = None
+
+    # FP8 quantization support
+    quantization: bool = False
+    use_block_quant_rollout: bool = False

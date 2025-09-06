@@ -446,9 +446,20 @@ class vLLMRollout(BaseRollout):
             self.inference_engine.llm_engine.add_lora(lora_reqest)
             logger.info(f"vLLM load weights, loaded_params: {len(weights)}")
         else:
-            model = self.inference_engine.llm_engine.model_executor.driver_worker.worker.model_runner.model
+            model_runner = self.inference_engine.llm_engine.model_executor.driver_worker.worker.model_runner
+            model = model_runner.model
             patch_vllm_moe_model_weight_loader(model)
-            model.load_weights(weights)
+            
+            # Add the FP8 related logic here as sharding manager has been deprecated.
+            # Check if FP8 quantization is enabled and apply appropriate weight loading
+            if fp8_quant.is_fp8_model(model_runner.vllm_config):
+                logger.info(f"FP8 model detected: {model_runner.vllm_config.quant_config}")
+                # Convert bf16 weights to fp8 format before loading
+                loaded_params = fp8_quant.load_quanted_weights(weights, model_runner)
+                logger.info(f"FP8 weights loaded, loaded_params: {len(loaded_params)}")
+            else:
+                logger.debug("Loading standard weights (non-FP8)")
+                model.load_weights(weights)
 
 
 # https://github.com/vllm-project/vllm/issues/13175
@@ -564,9 +575,20 @@ class vLLMAsyncRollout(BaseRollout):
         Args:
             weights: A generator that yields the name of the weight tensor and the tensor itself.
         """
-        model = self.inference_engine.worker.model_runner.model
+        model_runner = self.inference_engine.worker.model_runner
+        model = model_runner.model
         patch_vllm_moe_model_weight_loader(model)
-        model.load_weights(weights)
+        
+        # Add the FP8 related logic here as sharding manager has been deprecated.
+        # Check if FP8 quantization is enabled and apply appropriate weight loading
+        if fp8_quant.is_fp8_model(model_runner.vllm_config):
+            logger.info(f"FP8 model detected (async): {model_runner.vllm_config.quant_config}")
+            # Convert bf16 weights to fp8 format before loading
+            loaded_params = fp8_quant.load_quanted_weights(weights, model_runner)
+            logger.info(f"FP8 weights loaded (async), loaded_params: {len(loaded_params)}")
+        else:
+            logger.debug("Loading standard weights (non-FP8, async)")
+            model.load_weights(weights)
 
     def generate_sequences(self, prompts: DataProto) -> DataProto:
         """Batch generate sequences in sync mode."""
