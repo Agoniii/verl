@@ -1,0 +1,17 @@
+working_dir: ./
+excludes: ["/.git/"]
+env_vars:
+  ROCR_VISIBLE_DEVICES: ""
+  HIP_VISIBLE_DEVICES: ""
+  TORCH_NCCL_AVOID_RECORD_STREAMS: "1"
+  VERL_LOGGING_LEVEL: "DEBUG"
+  # vLLM environment variables
+  #VLLM_LOGGING_LEVEL: "DEBUG"
+  VLLM_CONFIGURE_LOGGING: "1"
+  VLLM_USE_DEEP_GEMM: "1"
+  VLLM_SKIP_DEEP_GEMM_WARMUP: "0"
+  # Hugging Face cache control
+  HF_HOME: "/lustre/fsw/portfolios/coreai/users/alexq/hf"
+  HF_DATASETS_CACHE: "/lustre/fsw/portfolios/coreai/users/alexq/hf/datasets"
+  # If you are using vllm<=0.6.3, you might need to set the following environment variable to avoid bugs:
+  # VLLM_ATTENTION_BACKEND: "XFORMERS"

@@ -134,7 +134,8 @@ class RayDAPOTrainer(RayPPOTrainer):
                     )
                 gen_batch = gen_batch.repeat(repeat_times=self.config.actor_rollout_ref.rollout.n, interleave=True)
 
-                is_last_step = self.gen_steps >= self.total_training_steps
+                # Sharon: update to ensure training stops after total_training_steps
+                is_last_step = self.global_steps >= self.total_training_steps
 
                 with marked_timer("step", timing_raw):
                     # generate a batch
@@ -293,6 +294,14 @@ class RayDAPOTrainer(RayPPOTrainer):
                         old_log_prob.batch.pop("entropys")
                         batch = batch.union(old_log_prob)
 
+                    if "rollout_log_probs" in batch.batch.keys():
+                        # TODO: we may want to add diff of probs too.
+                        from verl.utils.debug.metrics import calculate_debug_metrics
+                        
+                        # Get TIS importance ratio cap from actor config
+                        tis_imp_ratio_cap = getattr(self.config.actor_rollout_ref.actor, 'tis_imp_ratio_cap', -1.0)
+                        metrics.update(calculate_debug_metrics(batch, tis_imp_ratio_cap=tis_imp_ratio_cap))
+                    
                     if self.use_reference_policy:
                         # compute reference log_prob
                         with marked_timer("ref", timing_raw, "olive"):

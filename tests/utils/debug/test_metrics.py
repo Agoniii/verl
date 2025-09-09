@@ -39,9 +39,20 @@ class TestMetrics(unittest.TestCase):
                 "responses": torch.zeros((2, 10)),
             }
         )
+        # Test without TIS
         metrics = calculate_debug_metrics(data)
-        print(metrics)
+        print("Metrics without TIS:", metrics)
         assert metrics["training/rollout_probs_diff_valid"] == 1
+        assert "training/kl_divergence_mean" in metrics
+        assert "training/policy_ratio_mean" in metrics
+        
+        # Test with TIS enabled
+        metrics_with_tis = calculate_debug_metrics(data, tis_imp_ratio_cap=2.0)
+        print("Metrics with TIS:", metrics_with_tis)
+        assert metrics_with_tis["training/rollout_probs_diff_valid"] == 1
+        assert "training/tis_imp_ratio_mean" in metrics_with_tis
+        assert "training/tis_truncation_ratio" in metrics_with_tis
+        assert metrics_with_tis["training/tis_imp_ratio_cap_value"] == 2.0
 
 
 if __name__ == "__main__":

@@ -1055,7 +1055,9 @@ class RayPPOTrainer:
                             # TODO: we may want to add diff of probs too.
                             from verl.utils.debug.metrics import calculate_debug_metrics
 
-                            metrics.update(calculate_debug_metrics(batch))
+                            # Get TIS importance ratio cap from actor config
+                            tis_imp_ratio_cap = getattr(self.config.actor_rollout_ref.actor, 'tis_imp_ratio_cap', -1.0)
+                            metrics.update(calculate_debug_metrics(batch, tis_imp_ratio_cap=tis_imp_ratio_cap))
 
                     if self.use_reference_policy:
                         # compute reference log_prob
