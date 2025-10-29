@@ -97,6 +97,7 @@ class vLLMRollout(BaseRollout):
         device_mesh: DeviceMesh,
     ):
         super().__init__(config, model_config, device_mesh)
+        self.saved_quantized_checkpoint = False
 
         model_path = model_config.local_path
         tokenizer = model_config.tokenizer
@@ -234,6 +235,7 @@ class vLLMRollout(BaseRollout):
         self.sampling_params = SamplingParams(**kwargs)
 
         self.pad_token_id = tokenizer.pad_token_id
+        self.model_hf_config = model_hf_config
 
     @contextmanager
     def update_sampling_params(self, **kwargs):
@@ -455,7 +457,8 @@ class vLLMRollout(BaseRollout):
             if fp8_quant.is_fp8_model(model_runner.vllm_config):
                 logger.info(f"FP8 model detected: {model_runner.vllm_config.quant_config}")
                 # Convert bf16 weights to fp8 format before loading
-                loaded_params = fp8_quant.load_quanted_weights(weights, model_runner)
+                loaded_params, saved_quantized_checkpoint = fp8_quant.load_quanted_weights(weights, model_runner, self.model_hf_config, self.saved_quantized_checkpoint)
+                self.saved_quantized_checkpoint = saved_quantized_checkpoint
                 logger.info(f"FP8 weights loaded, loaded_params: {len(loaded_params)}")
             else:
                 logger.debug("Loading standard weights (non-FP8)")

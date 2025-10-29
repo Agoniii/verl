@@ -2,6 +2,7 @@ import torch, os, ray
 from typing import Optional
 from dataclasses import dataclass, field
 from transformers import AutoConfig, AutoModel
+import torch.distributed as dist
 try:
     from vllm.model_executor.layers.linear import LinearBase
     from vllm._custom_ops import scaled_fp8_quant
@@ -294,13 +295,26 @@ def quant_weights(weights, model, quant_config):
     return weights_quantized
 
 
-def load_quanted_weights(weights, model_runner):
+def load_quanted_weights(weights, model_runner, model_hf_config, saved_quantized_checkpoint):
     #weights_quantized = []
     model = model_runner.model
     quant_config = model_runner.vllm_config.quant_config
 
     weights_quantized = quant_weights(weights, model, quant_config)
 
+
+    if not saved_quantized_checkpoint:
+        rank = dist.get_rank()
+        state_dict = {}
+        for name, param in weights_quantized:
+            state_dict[name] = param.data.cpu()
+        checkpoint_dir = "/lustre/fsw/general_sa/xueh/rl/verl_fp8-alex/qwen3_8b_quantized_checkpoint2"
+        checkpoint_path = os.path.join(checkpoint_dir, f"model_rank{rank}.pt")
+        print(f"Saving model to checkpoint_dir")
+        torch.save(state_dict, checkpoint_path)
+        del state_dict
+        saved_quantized_checkpoint = True
+ 
     # Monkey patch the param class to their subclass, as certain models
     # will check the param type to call the proper weightloader
     for name, param in model.named_parameters():
@@ -313,7 +327,7 @@ def load_quanted_weights(weights, model_runner):
     for name, param in model.named_parameters():
         if hasattr(param, "subclass_type"):
             param.__class__ = param.orig_type
-    return loaded_params
+    return loaded_params, saved_quantized_checkpoint
 
 
 def process_weights_after_loading(self, layer) -> None:
