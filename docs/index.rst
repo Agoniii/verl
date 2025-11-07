@@ -123,11 +123,13 @@ verl is fast with:
    examples/sandbox_fusion_example
    advance/rollout_trace.rst
    advance/rollout_skip.rst
-   advance/rollout_is.md
+   advance/rollout_corr.md
+   advance/rollout_corr_math.md
    advance/one_step_off
    advance/agent_loop
    advance/reward_loop
    advance/fully_async
+   advance/fp8.md
    data/transfer_queue.md
 
 .. toctree::
